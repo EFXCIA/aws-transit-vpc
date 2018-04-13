@@ -209,7 +209,7 @@
                 "CheckStackStatusLambda" : {"Ref":"CheckStackStatus"},
                 "ConfigureTransitVpnLambda": {"Ref":"ConfigureTransitVpn"},
                 "RebalancePaGroupsLambda": {"Ref":"RebalancePaGroups"},
-                "DeleteTransitVpnConfigurationLambda" : {"Ref": "DeleteTransitVpnConfiguration"}                
+                "DeleteTransitVpnConfigurationLambda" : {"Ref": "DeleteTransitVpnConfiguration"}
             }
         },
         "TransitInitializeLambda":{

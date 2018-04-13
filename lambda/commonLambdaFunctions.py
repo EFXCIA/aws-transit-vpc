@@ -62,7 +62,7 @@ def publishToSns(snsTopicArn, message, roleArn=None):
     except Exception as e:
         logger.error("Error in publishToSns(), Error: {}".format(str(e)))
         #return False
-		
+
 def fetchFromQueue(sqsQueueUrl):
     """Get one message from SQS Queue and return it
     """
@@ -94,21 +94,31 @@ def deleteVgw(vgwId,vpcId,awsRegion):
         logger.error("Error in deleteVgw(), Error: {}".format(str(e)))
         pass
 
-def isVgwAttachedToVpc(vpcId,awsRegion):
-    """Verifies whether the VPC has any VGW attached, return either VgwId or False
-    """
+
+def isVgwAttachedToVpc(vpcId, awsRegion):
+    '''Verifies whether the VPC has any VGW attached, return either VgwId or
+    False
+    '''
     try:
         ec2_conn = boto3.client('ec2', region_name=awsRegion)
-        filters = [{'Name':'attachment.vpc-id','Values':[vpcId]}, {'Name':'attachment.state','Values':['attached']}]
-        response = ec2_conn.describe_vpn_gateways(Filters=filters)['VpnGateways']
-        if response: return response[0]
-        else: return False
+        filters = [{'Name': 'attachment.vpc-id', 'Values': [vpcId]},
+                   {'Name': 'attachment.state', 'Values': ['attached']}]
+        response = ec2_conn.describe_vpn_gateways(
+            Filters=filters
+        )['VpnGateways']
+        if response:
+            return response[0]
+        else:
+            return False
     except Exception as e:
-        logger.error("Error in isVgwAttachedToVpc(), Error: {}".format(str(e)))
+        logger.error('Error in isVgwAttachedToVpc(), Error: {}'.format(str(e)))
         return False
+
+
 def checkCgw(awsRegion, n1Eip, n2Eip):
-    """Verifies whether the CGWs are already created or not, returns either a list of cgwIds or False
-    """
+    '''Verifies whether the CGWs are already created or not, returns either a
+    list of cgwIds or False
+    '''
     try:
         cgwIds = []
         ec2_conn = boto3.client('ec2', region_name=awsRegion)
@@ -132,34 +142,68 @@ def checkCgw(awsRegion, n1Eip, n2Eip):
         logger.error("Error from checkCgw, Error: {}".format(str(e)))
         return False
 
-def createVgwAttachToVpc(vpcId,vgwAsn,region,paGroup):
-    """Creates a VGW and attach it to the VPC, returns VgwId
-    """
+
+def createVgwAttachToVpc(vpcId, vgwAsn, region, paGroup):
+    '''Creates a VGW and attach it to the VPC, returns VgwId'''
     try:
-        tags=[{'Key':'Name','Value':paGroup}]
+        tags = [{'Key': 'Name', 'Value': paGroup}]
         import time
-        ec2Connection=boto3.client('ec2',region_name=region)
-        #Create VGW with vgwAsn
-        response=ec2Connection.create_vpn_gateway(Type='ipsec.1',AmazonSideAsn=int(vgwAsn))
-        #Attach VGW to VPC
+        ec2Connection = boto3.client('ec2', region_name=region)
+        # Create VGW with vgwAsn
+        response = ec2Connection.create_vpn_gateway(Type='ipsec.1',
+                                                    AmazonSideAsn=int(vgwAsn))
+        vgw_id = response['VpnGateway']['VpnGatewayId']
+
+        # Attach VGW to VPC
         while True:
-            status=ec2Connection.attach_vpn_gateway(VpcId=vpcId,VpnGatewayId=response['VpnGateway']['VpnGatewayId'],DryRun=False)['VpcAttachment']
-            if status['State']=='attaching':
+            status = ec2Connection.attach_vpn_gateway(
+                VpcId=vpcId,
+                VpnGatewayId=vgw_id,
+                DryRun=False
+            )['VpcAttachment']
+            if status['State'] == 'attaching':
                 time.sleep(2)
-            elif status['State']=='attached':
-                ec2Connection.create_tags(Resources=[response['VpnGateway']['VpnGatewayId']],Tags=tags)
-                return response['VpnGateway']['VpnGatewayId']
+            elif status['State'] == 'attached':
+                ec2Connection.create_tags(
+                    Resources=[vgw_id],
+                    Tags=tags
+                )
+                return vgw_id
             else:
-                return None
-        #return response['VpnGateway']['VpnGatewayId']
+                return False
+
     except Exception as e:
-        logger.error("Error creating Vgw and Attaching it to VPC, Error : {}".format(str(e)))
+        logger.error('Error creating Vgw and Attaching it to VPC, '
+                     'Error : {}'.format(str(e)))
         return False
 
-def createCgw(cgwIp,cgwAsn,region,tag):
+
+def enable_dynamic_routes(vpc_id, vgw_id, region):
+    '''Enable dynamic route propagation'''
+    logger.info('Enable dynamic route propagation')
+    try:
+        ec2Client = boto3.client('ec2', region_name=region)
+        ec2Resource = boto3.resource('ec2', region_name=region)
+        vpc_obj = ec2Resource.Vpc(vpc_id)
+        route_table_iterator = vpc_obj.route_tables.all()
+
+        for rt in route_table_iterator:
+            if vgw_id not in [v['GatewayId'] for v in rt.propagating_vgws]:
+                logger.info('Enabling route propagation for vgw {}, route '
+                            'table {}'.format(vgw_id, rt.route_table_id))
+                ec2Client.enable_vgw_route_propagation(
+                    GatewayId=vgw_id,
+                    RouteTableId=rt.route_table_id
+                )
+    except Exception as e:
+        logger.error('Error enabling dynamic routing, '
+                     'Error : {}'.format(str(e)))
+
+
+def createCgw(cgwIp, cgwAsn, region, tag):
     """Creates CGW and returns CgwId
     """
-    try: 
+    try:
         tags=[{'Key':'Name','Value':tag}]
         ec2Connection=boto3.client('ec2',region_name=region)
         response=ec2Connection.create_customer_gateway(BgpAsn=int(cgwAsn), PublicIp=cgwIp, Type='ipsec.1')
@@ -179,7 +223,7 @@ def uploadObjectToS3(vpnConfiguration, bucketName,assumeRoleArn=None):
         if assumeRoleArn:
             stsConnection = boto3.client('sts')
             assumedrole = stsConnection.assume_role(RoleArn=assumeRoleArn, RoleSessionName="Sample")
-            s3 = boto3.resource('s3', aws_access_key_id=assumedrole['Credentials']['AccessKeyId'], aws_secret_access_key=assumedrole['Credentials']['SecretAccessKey'], aws_session_token=assumedrole['Credentials']['SessionToken'])    
+            s3 = boto3.resource('s3', aws_access_key_id=assumedrole['Credentials']['AccessKeyId'], aws_secret_access_key=assumedrole['Credentials']['SecretAccessKey'], aws_session_token=assumedrole['Credentials']['SessionToken'])
             s3.Object(bucketName, fileName).put(Body=vpnConfig)
             return True
         s3Connection.Object(bucketName, fileName).put(Body=vpnConfig)
@@ -187,7 +231,7 @@ def uploadObjectToS3(vpnConfiguration, bucketName,assumeRoleArn=None):
     except Exception as e:
         logger.error("Error uploading file to S3 Bucket, Error : %s"%str(e))
         return False
-		
+
 def getVpnConfFromS3(vpnId,region,bucketName):
     """Downloads the VPN configuration file from S3 bucket
     """
@@ -196,11 +240,11 @@ def getVpnConfFromS3(vpnId,region,bucketName):
         fileName=vpnId+'.xml'
         vpnConfiguration=s3Connection.Object(bucketName, fileName).get()['Body'].read().decode('utf-8')
         #Return the XML configuration of VPN Connection
-        return vpnConfiguration 
+        return vpnConfiguration
     except Exception as e:
         logger.error("Object Download Failed, Error : {}".format(str(e)))
         return False
-	
+
 def createVpnConnectionUploadToS3(region,vgwId,cgwId,tunnelOneCidr,tunnelTwoCidr,tag,bucketName,assumeRoleArn=None):
     """Creates VPN connection and upload the VPN configuration to the S3 bucket
     """

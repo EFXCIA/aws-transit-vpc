@@ -1,7 +1,7 @@
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
 import logging, os, sys
-from commonLambdaFunctions import createVpnConnectionUploadToS3, fetchFromSubscriberConfigTable, createVgwAttachToVpc, createCgw, publishToSns, isVgwAttachedToVpc, checkCgw, deleteVgw
+from commonLambdaFunctions import createVpnConnectionUploadToS3, fetchFromSubscriberConfigTable, createVgwAttachToVpc, createCgw, publishToSns, isVgwAttachedToVpc, checkCgw, deleteVgw, enable_dynamic_routes
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -12,11 +12,11 @@ Input:
     'Action': 'ConfigureSubscribingVpcVpn',
     'IpSegment': bgpIpPool['IpSegment'],
     'N1T1': bgpIpPool['N1T1'],
-    'N1T2': bgpIpPool['N1T2'], 
+    'N1T2': bgpIpPool['N1T2'],
     'N1Eip': paGroup['N1Eip'],
     'N1Asn': paGroup['N1Asn'],
     'N2T1': bgpIpPool['N2T1'],
-    'N2T2': bgpIpPool['N2T2'], 
+    'N2T2': bgpIpPool['N2T2'],
     'N2Eip': paGroup['N2Eip']'
     'N2Asn': paGroup['N2Asn'],
     'PaGroupName': paGroup['PaGroupName'],
@@ -28,12 +28,12 @@ Input:
     'TransitVpnBucketName': transitConfig['TransitVpnBucketName'],
     'TransitAssumeRoleArn': transitConfig['TransitAssumeRoleArn'],
     'TransitSnsArn': transitConfig['TransitSnsArn']
-} 
+}
 '''
 
 subscriberConfigTable = os.environ['subscriberConfigTable']
 region = os.environ['Region']
-        
+
 def putItemSubscriberLocalDb(tableName,item):
     """Puts an Item into the SubscriberLocalDb table with VpcId, VpcCidr, VgwId, Cgw1Id, Cgw2Id, Vpn1Id, Vpn2Id and PaGroupName
     """
@@ -45,7 +45,7 @@ def putItemSubscriberLocalDb(tableName,item):
     except Exception as e:
         logger.error("Updating LocalDb failed, Error: {}".format(str(e)))
 
-def updateVpcVpnTable(tableName,item):    
+def updateVpcVpnTable(tableName,item):
     """Updates VpcVpnTable with VpnId, VpcId, PaGroupName and PaGroupNode
     """
     try:
@@ -56,20 +56,24 @@ def updateVpcVpnTable(tableName,item):
     except Exception as e:
         logger.error("Updating VpcVpnTable failed, Error: {}".format(str(e)))
 
-def lambda_handler(event,context):
+
+def lambda_handler(event, context):
     logger.info("Got Event {}".format(event))
     vgwId = ""
     try:
-        subscriberConfig=fetchFromSubscriberConfigTable(subscriberConfigTable)
+        subscriberConfig = fetchFromSubscriberConfigTable(subscriberConfigTable)
         if subscriberConfig:
             vgwData = isVgwAttachedToVpc(event['VpcId'], event['Region'])
             logger.info("VGW data : {}".format(vgwData))
-            if vgwData: vgwId = vgwData['VpnGatewayId']
+            if vgwData:
+                vgwId = vgwData['VpnGatewayId']
             if not vgwId:
-                #Create VGW and attach it to VPC
+                # Create VGW and attach it to VPC
                 vgwId=createVgwAttachToVpc(event['VpcId'],int(event['VgwAsn']),event['Region'],event['PaGroupName'])
                 logger.info("VGW - {} is created and attached to VPC - {}".format(vgwId,event['VpcId']))
-            else: logger.info("Using existing Vgw: {} for VPC: {} ".format(vgwId, event['VpcId']))
+            else:
+                logger.info("Using existing Vgw: {} for VPC: {} ".format(vgwId, event['VpcId']))
+
             logger.info("Checking whether CGWs are already created or not")
             cgwIds = checkCgw(event['Region'],event['N1Eip'], event['N2Eip'])
             if not cgwIds:
@@ -87,6 +91,8 @@ def lambda_handler(event,context):
                 cgwNode1Id = cgwIds[0]
                 cgwNode2Id = cgwIds[1]
 
+            enable_dynamic_routes(event['VpcId'], vgwId, event['Region'])
+
             # VPN Connection
             print(event['PaGroupName'])
             vpn1Tag=event['VpcId']+'-'+event['PaGroupName']+'-N1'
@@ -101,7 +107,7 @@ def lambda_handler(event,context):
             if vpnId1 and vpnId2:
                 data={
                     'Action': 'ConfigureTransitVpn',
-                    'PaGroupName': event['PaGroupName'],    
+                    'PaGroupName': event['PaGroupName'],
                     'IpSegment': event['IpSegment'],
                     'VpnN1': vpnId1,
                     'VpnN2': vpnId2,
@@ -122,7 +128,7 @@ def lambda_handler(event,context):
                 publishToSns(event['TransitSnsArn'], data, event['TransitAssumeRoleArn'])
                 logger.info("Publishing message to Transit SNS - {} with data: {}".format(event['TransitSnsArn'],data))
             #Update SubcriberDynamoDB with VPN1-ID, VPN1-ID, VGW, CGW1, CGW2 and PA-Group-Name
-            if vpnId1 and vpnId2: 
+            if vpnId1 and vpnId2:
                 data = {
                     'VpcId': event['VpcId'],
                     'VpcCidr': event['VpcCidr'],
@@ -145,7 +151,7 @@ def lambda_handler(event,context):
                     'Region': event['Region']
                 }
                 updateVpcVpnTable(subscriberConfig['SubscriberVpcVpnTable'],data)
-            if vpnId2: 
+            if vpnId2:
                 data = {
                     'VpnId': vpnId2,
                     'VpcId': event['VpcId'],

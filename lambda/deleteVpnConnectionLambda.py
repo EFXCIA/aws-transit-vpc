@@ -34,7 +34,7 @@ def deleteItemFromLocalDb(tableName, vpcId):
             logger.info("Successfully Deleted Item  with vpc-id : {}".format(vpcId))
             return response[0]
         else:
-            logger.info("The Item has been deleted in the Rebalance Operation, hencd exiting from the process")
+            logger.info("The Item has been deleted in the Rebalance Operation, hence exiting from the process")
             sys.exit(0)
     except Exception as e:
         logger.error("Deleting of Item with vpc-id: {}, Error: {}".format(vpcId,str(e)))
@@ -49,7 +49,7 @@ def deleteItemFromVpcVpnTable(tableName, vpnId):
         logger.info("Successfully Deleted Item  with vpn-id : {}".format(vpnId))
     except Exception as e:
         logger.error("Error from deleteItemFromVpcVpnTable is failed, Error: {}".format(str(e)))
-        
+
 def deleteVpn(vpnId,region):
     """Deletes the VPN Connection associated with the Subscribing VPC
     """
@@ -111,7 +111,7 @@ def lambda_handler(event,context):
             #deleteVpns
             deleteVpn(vpn1Id,event['Region'])
             deleteVpn(vpn2Id, event['Region'])
-        
+
         # Detach and Delete VGW
         vgwAsn = deleteVgw(result['VgwId'],vpcId,event['Region'])
 
@@ -130,7 +130,7 @@ def lambda_handler(event,context):
         deleteItemFromVpcVpnTable(subscriberConfig['SubscriberVpcVpnTable'], vpn1Id)
         deleteItemFromVpcVpnTable(subscriberConfig['SubscriberVpcVpnTable'], vpn2Id)
 
-        #Update Tags 
+        #Update Tags
         updateTags(event['Region'], vpcId)
 
         logger.info("Publishing message to TransitSnsArn: {} with data: {}".format(transitSnsTopicArn,event))
