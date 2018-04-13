@@ -1,8 +1,11 @@
+# NOTICE
+This forked repository has some very specific modifications that differ from the vendor's solution. Please don't use this, and, if you do, don't submit pull requests to me. If you want to work with someone, work with Palo Alto. Thanks.
+
 # AWS Transit VPC with VM-Series
 
 This solution deploys a secured Transit VPC in AWS.  This allows you to secure many spoke or subscribing VPCs using centralized VM-Series firewalls in the transit/hub VPC.  The solution uses the VGW feature for specifying  addressing such that 100s of spokes can be connected to a single hub with no address conflicts.  This solution will secure traffic between VPCs, between a VPC and an on-prem/hybrid cloud resource, and outbound traffic.  Securing outbound traffic in the Transit VPC allows you to allow safely enabled access to the Internet for tasks like software installs and patches without backhauling the traffic to an on prem-firewall for security.
 
-For more detail about what takes place behind the scenes in this deployment please see the [Transit VPC with VM-Series Overview](https://github.com/PaloAltoNetworks/aws-transit-vpc/blob/master/documentation/solution_overview.md)
+For more detail about what takes place behind the scenes in this deployment please see the [Transit VPC with VM-Series Overview](documentation/solution_overview.md)
 
 ![alt_text](documentation/images/topology.png "topology")
 
