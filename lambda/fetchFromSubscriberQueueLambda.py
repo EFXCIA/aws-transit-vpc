@@ -1,7 +1,8 @@
-import boto3
-import logging, os
+import logging
+import os
 import json
-from commonLambdaFunctions import fetchFromQueue, fetchFromSubscriberConfigTable
+from commonLambdaFunctions import fetchFromQueue
+from commonLambdaFunctions import fetchFromSubscriberConfigTable
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -9,24 +10,29 @@ logger.setLevel(logging.INFO)
 subscriberConfigTable = os.environ['subscriberConfigTable']
 region = os.environ['Region']
 
-def lambda_handler(event,context):
+
+def lambda_handler(event, context):
     logger.info("Got Event {}".format(event))
     try:
-        subscriberConfig=fetchFromSubscriberConfigTable(subscriberConfigTable)
+        subscriberConfig = fetchFromSubscriberConfigTable(
+            subscriberConfigTable
+        )
         if subscriberConfig:
-            logger.info("Reading from Queue")
-            receive_message=fetchFromQueue(subscriberConfig['SubscriberQueueUrl'])
+            logger.info('Reading from Queue')
+            receive_message = fetchFromQueue(
+                subscriberConfig['SubscriberQueueUrl']
+            )
             if 'Messages' in receive_message:
                 for message in receive_message['Messages']:
-                    action=message['Body']
-                    action=json.loads(action.replace('\'','\"'))
+                    action = message['Body']
+                    action = json.loads(action.replace('\'', '\"'))
                     return action
             else:
-                event={'Action':'Null'}
+                event = {'Action': 'Null'}
                 return event
         else:
-            logger.error("No data received from SubscriberConfig Table, Error")
-            return 
+            logger.error('No data received from SubscriberConfig Table, Error')
+            return
     except Exception as e:
         logger.error(str(e))
         return
